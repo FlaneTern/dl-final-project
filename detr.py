@@ -1,9 +1,15 @@
+from src.utils.seed_utils import set_seed
+
+set_seed(42)   # call once at the very top, before dataloaders/models
+
+
 # %% [markdown]
 # Common setup: paths for models and results
 
 from pathlib import Path
 import json
 import shutil
+import time
 
 MODELS_DIR = Path("trained_models")
 RESULTS_DIR = Path("results")
@@ -440,6 +446,78 @@ for epoch in range(num_epochs):
         model.state_dict(),
         MODELS_DIR / f"detr_hf_epoch{epoch + 1}.pth",
     )
+
+@torch.no_grad()
+def measure_fps_detr_hf(model, processor, loader, device, warmup=20, max_images=500):
+    """
+    Measure DETR inference FPS (including HF processor preprocessing).
+
+    - model: DetrForObjectDetection
+    - processor: DetrImageProcessor
+    - loader: DataLoader yielding (images, targets)
+    - device: torch.device
+    """
+    model.eval()
+
+    # ---------- WARMUP (not timed) ----------
+    it = iter(loader)
+    seen = 0
+    for images, _targets in it:
+        # images is a tuple/list of tensors in [0,1]
+        encoding = processor(
+            images=list(images),
+            return_tensors="pt",
+            do_rescale=False,  # VERY important: same as in training!
+        )
+        pixel_values = encoding["pixel_values"].to(device)
+        pixel_mask = encoding.get("pixel_mask")
+        if pixel_mask is not None:
+            pixel_mask = pixel_mask.to(device)
+
+        _ = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+        seen += len(images)
+        if seen >= warmup:
+            break
+
+    # ---------- TIMED RUN ----------
+    num_images = 0
+    it = iter(loader)
+
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    start = time.perf_counter()
+
+    for images, _targets in it:
+        encoding = processor(
+            images=list(images),
+            return_tensors="pt",
+            do_rescale=False,
+        )
+        pixel_values = encoding["pixel_values"].to(device)
+        pixel_mask = encoding.get("pixel_mask")
+        if pixel_mask is not None:
+            pixel_mask = pixel_mask.to(device)
+
+        _ = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+        num_images += len(images)
+        if num_images >= max_images:
+            break
+
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    end = time.perf_counter()
+
+    elapsed = end - start
+    fps = num_images / elapsed if elapsed > 0 else 0.0
+    return fps
+
+fps_detr = [measure_fps_detr_hf(model, processor, val_loader, device)]
+print("DETR FPS (val subset):", fps_detr)
+with open(RESULTS_DIR / "detr_fps.json", "w") as f:
+    json.dump(fps_detr, f, indent=2)
+
 
 # Save DETR history for plotting
 with open(RESULTS_DIR / "detr_hf_history.json", "w") as f:

@@ -1,9 +1,15 @@
+from src.utils.seed_utils import set_seed
+
+set_seed(42)   # call once at the very top, before dataloaders/models
+
+
 # %% [markdown]
 # Common setup: paths for models and results
 
 from pathlib import Path
 import json
 import shutil
+import time
 
 MODELS_DIR = Path("trained_models")
 RESULTS_DIR = Path("results")
@@ -255,6 +261,44 @@ for epoch in range(num_epochs):
         model.state_dict(),
         MODELS_DIR / f"frcnn_epoch{epoch + 1}.pth",
     )
+
+@torch.no_grad()
+def measure_fps_detector(model, loader, device, warmup=20, max_batches=100):
+    model.eval()
+    num_images = 0
+
+    # 1) warmup
+    it = iter(loader)
+    for _ in range(warmup):
+        try:
+            images, _ = next(it)
+        except StopIteration:
+            break
+        images = [img.to(device) for img in images]
+        _ = model(images)
+
+    # 2) timed loop
+    it = iter(loader)
+    start = time.perf_counter()
+    for _ in range(max_batches):
+        try:
+            images, _ = next(it)
+        except StopIteration:
+            break
+        images = [img.to(device) for img in images]
+        _ = model(images)
+        num_images += len(images)
+    end = time.perf_counter()
+
+    elapsed = end - start
+    fps = num_images / elapsed if elapsed > 0 else 0.0
+    return fps
+
+fps_frcnn = [measure_fps_detector(model, val_loader, device)]
+print("FRCNN FPS (val subset):", fps_frcnn)
+with open(RESULTS_DIR / "frcnn_fps.json", "w") as f:
+    json.dump(fps_frcnn, f, indent=2)
+
 
 # Save FRCNN history for later plotting
 with open(RESULTS_DIR / "frcnn_history.json", "w") as f:

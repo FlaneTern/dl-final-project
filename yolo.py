@@ -1,3 +1,8 @@
+from src.utils.seed_utils import set_seed
+
+set_seed(42)   # call once at the very top, before dataloaders/models
+
+
 # %% [markdown]
 # Common setup: paths for models and results
 
@@ -79,6 +84,13 @@ if yolo_results_csv.exists():
 else:
     print("WARNING: YOLO results.csv not found at", yolo_results_csv)
 
+# metrics.speed["inference"] is ms per image
+infer_ms = float(metrics.speed["inference"])
+fps_yolo = 1000.0 / infer_ms
+print("YOLOv8 FPS (val subset):", fps_yolo)
+with open(RESULTS_DIR / "yolo_fps.json", "w") as f:
+    json.dump(fps_yolo, f, indent=2)
+    
 # Best YOLO weights are already in:
 #   trained_models/yolo/yolov8s_640_subset/weights/best.pt
 # which matches your 'trained_models/' requirement.

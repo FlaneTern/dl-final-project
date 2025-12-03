@@ -220,3 +220,6 @@ results/
 runs/
 trained_models/
 venv/
+yolo11n.pt
+yolov8s.pt
+oldresults/
