@@ -1,4 +1,4 @@
-from src.utils.seed_utils import set_seed
+from my_utils.seed_utils import set_seed
 set_seed(42)   # call once at the very top, before dataloaders/models
 
 from pathlib import Path

@@ -1,4 +1,4 @@
-from src.utils.seed_utils import set_seed
+from my_utils.seed_utils import set_seed
 
 set_seed(42)   # call once at the very top, before dataloaders/models
 
@@ -27,7 +27,7 @@ from pycocotools.cocoeval import COCOeval
 from transformers import DetrImageProcessor, DetrForObjectDetection
 from torch.utils.data import Subset  # used in get_img_ids_for_loader
 
-from src.utils.coco_utils import make_coco_loaders
+from my_utils.coco_utils import make_coco_loaders
 
 
 def get_img_ids_for_loader(loader):
