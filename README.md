@@ -245,7 +245,7 @@ If you find this code useful in your work, please cite our project report:
 
 ```text
 Pradata, S. Y., Kurniawan, Y. R., Mukhaer, A. A., Adnan, K. A., & Widja, A. R.
-"Replikasi dan Analisis Baseline Modern untuk Deteksi Objek pada COCO Dataset", 2024.
+"Replikasi dan Analisis Baseline Modern untuk Deteksi Objek pada COCO Dataset", 2025.
 Departemen Ilmu Komputer dan Elektronika, Universitas Gadjah Mada.
 ```
 
