@@ -18,7 +18,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% 
 # ======================================
-# 1. Faster R-CNN: train + COCO mAP
+# 1. Faster R-CNN: train + COCO mAP + val loss
 # ======================================
 import torch
 from torch.optim import SGD
@@ -113,9 +113,44 @@ def train_one_epoch(model, loader, optimizer, device):
 
 
 @torch.no_grad()
+def validate_one_epoch(model, loader, device):
+    """
+    Compute validation loss for Faster R-CNN.
+
+    NOTE: torchvision detection models only return a loss dict when
+    model.training == True, so we temporarily switch to train() here,
+    but keep gradients disabled with torch.no_grad().
+    """
+    # remember previous mode
+    was_training = model.training
+
+    # must be train() to get loss dict from torchvision detection models
+    model.train()
+
+    running_loss = 0.0
+
+    for images, targets in tqdm(loader, desc="Val FRCNN (loss)"):
+        images = [img.to(device) for img in images]
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+
+        loss_dict = model(images, targets)   # this is now a dict
+        losses = sum(loss for loss in loss_dict.values())
+
+        running_loss += losses.item()
+
+    # restore previous mode
+    if was_training:
+        model.train()
+    else:
+        model.eval()
+
+    return running_loss / len(loader)
+
+
+@torch.no_grad()
 def evaluate_coco_mAP(model, loader, device):
     """
-    Run COCO-style evaluation on *your subset* of val2017.
+    Run COCO-style evaluation on of val2017.
     Returns dict with AP, AP50, AP75, APs, APm, APl.
     """
     model.eval()
@@ -217,13 +252,15 @@ print("Evaluating FRCNN before training...")
 metrics0 = evaluate_coco_mAP(model, val_loader, device)
 print("Initial FRCNN metrics:", metrics0)
 
-entry0 = {"epoch": 0, "train_loss": None}
+# match DETR history structure: epoch 0, no train/val loss yet
+entry0 = {"epoch": 0, "train_loss": None, "val_loss": None}
 if metrics0 is not None:
     entry0.update(metrics0)
 frcnn_history.append(entry0)
 
 for epoch in range(num_epochs):
     train_loss = train_one_epoch(model, train_loader, optimizer, device)
+    val_loss = validate_one_epoch(model, val_loader, device)
     scheduler.step()
 
     metrics = evaluate_coco_mAP(model, val_loader, device)
@@ -231,13 +268,17 @@ for epoch in range(num_epochs):
         ap = metrics["AP"]
         print(
             f"[FRCNN] Epoch {epoch + 1}/{num_epochs} | "
-            f"train_loss={train_loss:.4f} | "
+            f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | "
             f"AP={ap:.4f} | AP50={metrics['AP50']:.4f} | "
             f"AP75={metrics['AP75']:.4f} | APs={metrics['APs']:.4f} | "
             f"APm={metrics['APm']:.4f} | APl={metrics['APl']:.4f}"
         )
 
-        history_entry = {"epoch": epoch + 1, "train_loss": train_loss}
+        history_entry = {
+            "epoch": epoch + 1,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+        }
         history_entry.update(metrics)
         frcnn_history.append(history_entry)
 
@@ -251,16 +292,22 @@ for epoch in range(num_epochs):
     else:
         print(
             f"[FRCNN] Epoch {epoch + 1}/{num_epochs} | "
-            f"train_loss={train_loss:.4f} | no detections on val set"
+            f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | "
+            f"no detections on val set"
         )
         frcnn_history.append(
-            {"epoch": epoch + 1, "train_loss": train_loss}
+            {
+                "epoch": epoch + 1,
+                "train_loss": train_loss,
+                "val_loss": val_loss,
+            }
         )
 
     torch.save(
         model.state_dict(),
         MODELS_DIR / f"frcnn_epoch{epoch + 1}.pth",
     )
+
 
 @torch.no_grad()
 def measure_fps_detector(model, loader, device, warmup=20, max_batches=100):

@@ -99,7 +99,7 @@ def get_coco_api_from_loader(loader):
 # -------------------------
 def build_hf_targets(targets):
     """
-    Convert a batch of targets from your format:
+    Convert a batch of targets from format:
         {
             "boxes": Tensor[num_boxes, 4] in xyxy,
             "labels": Tensor[num_boxes],

@@ -223,3 +223,4 @@ venv/
 yolo11n.pt
 yolov8s.pt
 oldresults/
+plots/
